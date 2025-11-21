@@ -15,7 +15,7 @@ from src.packet_source import PcapSource
 from src.parser import EnhancedRTPSParser
 from src.sink import DataFrameSink
 from src.processor import TimeWindowProcessor
-from src.transformer import TopicGrouper, EndpointMapper, PivotTableBuilder
+from src.transformer import TopicGrouper, NodeGrouper, EndpointMapper, PivotTableBuilder
 from src.excel_writer import ExcelWriter
 import pandas as pd
 
@@ -131,37 +131,38 @@ def main():
         print(f"  ✓ SEDP Readers: {len(separated['sedp_readers'])}개")
         print(f"  ✓ User Traffic: {len(separated['user_traffic'])}개")
         
-        # 5. Topic별 그룹화
-        print("\n[5/6] Topic별 그룹화...")
-        grouped_by_topic = topic_grouper.group_by_topic(enriched_submessages)
-        print(f"  ✓ {len(grouped_by_topic)}개 Topic 발견")
+        # 5. 노드별 그룹화
+        print("\n[5/6] ROS2 노드별 그룹화...")
+        node_grouper = NodeGrouper()
+        grouped_by_node = node_grouper.group_by_node(enriched_submessages)
+        print(f"  ✓ {len(grouped_by_node)}개 노드 발견")
         
-        if len(grouped_by_topic) == 0:
-            print("  ⚠️  Topic이 없습니다. Excel 생성을 중단합니다.")
+        if len(grouped_by_node) == 0:
+            print("  ⚠️  노드가 없습니다. Excel 생성을 중단합니다.")
             sys.exit(1)
         
-        # 6. Pivot Table 생성 (Topic별)
-        print("\n[6/6] Topic별 Pivot Table 생성...")
+        # 6. Pivot Table 생성 (노드별)
+        print("\n[6/6] 노드별 Pivot Table 생성...")
         builder = PivotTableBuilder(window_size=args.window)
         pivot_tables = {}
         
-        for topic, messages in grouped_by_topic.items():
+        for node_name, messages in grouped_by_node.items():
             df_pivot = builder.build(messages, participant_id=None)
             
             # 시트명 생성
-            sheet_name = topic_grouper.format_topic_name_for_sheet(topic)
+            sheet_name = node_grouper.format_node_name_for_sheet(node_name)
             
             pivot_tables[sheet_name] = df_pivot
             print(f"  ✓ {sheet_name}: {len(df_pivot):,} 행 ({len(messages)} messages)")
         
-        # Overview 생성 (Topic 기반)
+        # Overview 생성 (노드 기반)
         print("\n[7/7] Overview 및 SEDP 시트 생성...")
         
-        topic_summary = topic_grouper.get_topic_summary(grouped_by_topic)
+        node_summary = node_grouper.get_node_summary(grouped_by_node)
         overview_data = []
         
-        for summary in topic_summary:
-            sheet_name = topic_grouper.format_topic_name_for_sheet(summary['topic'])
+        for summary in node_summary:
+            sheet_name = node_grouper.format_node_name_for_sheet(summary['node_name'])
             
             # Submessage types를 문자열로 변환
             submsg_types_str = ", ".join(
@@ -169,17 +170,15 @@ def main():
             )
             
             overview_data.append({
-                'Topic': summary['topic'],
+                'Node': summary['node_name'],
                 'Sheet Name': sheet_name,
                 'Messages': summary['message_count'],
-                'Participants': summary['participant_count'],
-                'Writers': summary['writer_count'],
-                'Readers': summary['reader_count'],
+                'Topics': summary['topic_count'],
                 'Types': submsg_types_str
             })
         
         df_overview = pd.DataFrame(overview_data)
-        print(f"  ✓ Overview 시트 생성: {len(df_overview)} topics")
+        print(f"  ✓ Overview 시트 생성: {len(df_overview)} 노드")
         
         # SEDP 시트 데이터 준비
         sedp_data = endpoint_mapper.get_sedp_dataframe_data()
@@ -200,9 +199,9 @@ def main():
         writer.write_sedp_sheet(df_sedp)
         print(f"  ✓ SEDP 시트 작성")
         
-        # Topic별 시트
-        writer.write_topic_sheets(pivot_tables)
-        print(f"  ✓ {len(pivot_tables)}개 Topic 시트 작성")
+        # 노드별 시트
+        writer.write_node_sheets(pivot_tables)
+        print(f"  ✓ {len(pivot_tables)}개 노드 시트 작성")
         
         writer.save()
         print(f"  ✓ 파일 저장: {output_path}")
@@ -218,17 +217,17 @@ def main():
         print(f"파일: {output_path}")
         print(f"크기: {file_size / 1024:.1f} KB ({file_size / (1024*1024):.2f} MB)")
         print(f"\n시트 구성:")
-        print(f"  - Overview: {len(df_overview)} topics")
+        print(f"  - Overview: {len(df_overview)} 노드")
         print(f"  - SEDP: {len(df_sedp)} endpoints")
-        print(f"  - Topic 시트: {len(pivot_tables)}개")
+        print(f"  - 노드 시트: {len(pivot_tables)}개")
         print(f"\n데이터:")
         print(f"  - 총 Submessages: {len(submessages):,}개")
         print(f"  - Topic 매핑됨: {mapped_count:,}개")
         print(f"  - Excel 행: {total_excel_rows:,}개")
-        print(f"\nTopic 목록:")
-        for i, topic in enumerate(sorted(grouped_by_topic.keys()), start=1):
-            msg_count = len(grouped_by_topic[topic])
-            print(f"  {i}. {topic} ({msg_count:,} messages)")
+        print(f"\n노드 목록:")
+        for i, node_name in enumerate(sorted(grouped_by_node.keys()), start=1):
+            msg_count = len(grouped_by_node[node_name])
+            print(f"  {i}. {node_name} ({msg_count:,} messages)")
         
     except FileNotFoundError as e:
         print(f"\n❌ 오류: 파일을 찾을 수 없습니다 - {e}")

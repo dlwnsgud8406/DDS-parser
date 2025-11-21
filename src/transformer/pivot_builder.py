@@ -106,7 +106,8 @@ class PivotTableBuilder:
             for msg_idx, msg in enumerate(window_msgs):
                 row = {
                     'idx': idx,
-                    'TimeInterval': window_key
+                    'TimeInterval': window_key,
+                    'topic': msg.get('topic', '')  # Topic 컬럼 추가
                 }
                 
                 # 모든 53개 PID를 PID 번호 순으로 처리

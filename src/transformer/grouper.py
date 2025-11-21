@@ -4,8 +4,9 @@ Participant Grouper
 파싱된 RTPS submessage를 Participant(노드)별로 그룹화
 """
 
-from typing import List, Dict, Tuple, Any
+from typing import List, Dict, Tuple, Any, Set
 from collections import defaultdict
+from .node_extractor import NodeNameExtractor
 
 
 class ParticipantGrouper:
@@ -148,6 +149,146 @@ class ParticipantGrouper:
             return f"Node_{index}_{hostId:08x}_{appId:08x}"
         else:
             return f"Node_{hostId:08x}_{appId:08x}_{instanceId:08x}"
+
+
+class NodeGrouper:
+    """
+    ROS2 노드별로 submessage 그룹화
+    
+    토픽 이름에서 노드 이름을 추출하여 노드별로 메시지를 그룹화합니다.
+    Excel 출력 시 각 노드별로 시트를 만듭니다.
+    """
+    
+    def __init__(self):
+        self.extractor = NodeNameExtractor()
+    
+    def group_by_node(
+        self, 
+        submessages: List[Dict[str, Any]]
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        ROS2 노드별로 submessage 그룹화
+        
+        Args:
+            submessages: topic 필드가 있는 submessage 리스트
+                각 submessage는 'topic' 필드를 포함해야 함
+        
+        Returns:
+            dict: {
+                'stella_md_node': [submsg1, submsg2, ...],
+                'launch_ros_*': [submsg1, submsg2, ...],
+                '__unknown__': [submsg1, submsg2, ...],  # 노드 미분류
+                ...
+            }
+            
+        Example:
+            >>> grouper = NodeGrouper()
+            >>> enriched = endpoint_mapper.enrich_submessages(submessages)
+            >>> grouped = grouper.group_by_node(enriched)
+            >>> for node_name, msgs in grouped.items():
+            ...     print(f"Node {node_name}: {len(msgs)} messages")
+        """
+        grouped = defaultdict(list)
+        
+        for submsg in submessages:
+            topic = submsg.get('topic')
+            
+            if not topic:
+                # topic 없으면 __unknown__
+                grouped['__unknown__'].append(submsg)
+                continue
+            
+            # 토픽에서 노드 이름 추출
+            node_name = self.extractor.extract_node_from_topic(topic)
+            
+            if node_name:
+                grouped[node_name].append(submsg)
+            else:
+                # 노드 추출 실패 (builtin topics 등)
+                grouped['__unknown__'].append(submsg)
+        
+        return dict(grouped)
+    
+    def get_node_summary(
+        self,
+        grouped_data: Dict[str, List[Dict[str, Any]]]
+    ) -> List[Dict[str, Any]]:
+        """
+        각 노드의 요약 정보 생성
+        
+        Args:
+            grouped_data: group_by_node()의 결과
+            
+        Returns:
+            list[dict]: [
+                {
+                    'node_name': 'stella_md_node',
+                    'message_count': 1234,
+                    'topics': {'rt/odom', 'rq/stella_md_node/get_parametersRequest', ...},
+                    'submsg_types': {'DATA': 100, 'HEARTBEAT': 50, ...}
+                },
+                ...
+            ]
+        """
+        summary = []
+        
+        for node_name, messages in grouped_data.items():
+            # 토픽 수집
+            topics = set()
+            for msg in messages:
+                topic = msg.get('topic')
+                if topic:
+                    topics.add(topic)
+            
+            # Submessage Type 통계
+            submsg_types = defaultdict(int)
+            for msg in messages:
+                submsg_name = msg.get('submsg_name', 'UNKNOWN')
+                submsg_types[submsg_name] += 1
+            
+            summary.append({
+                'node_name': node_name,
+                'message_count': len(messages),
+                'topics': topics,
+                'topic_count': len(topics),
+                'submsg_types': dict(submsg_types)
+            })
+        
+        # message_count 기준 정렬 (내림차순)
+        summary.sort(key=lambda x: x['message_count'], reverse=True)
+        
+        return summary
+    
+    def format_node_name_for_sheet(self, node_name: str) -> str:
+        """
+        노드 이름을 Excel 시트 이름으로 변환
+        
+        Args:
+            node_name: 노드 이름 (예: "stella_md_node", "launch_ros_*")
+            
+        Returns:
+            str: Excel 시트 이름 (31자 제한, 특수문자 제거)
+        """
+        if node_name == '__unknown__':
+            return 'Unknown'
+        
+        # / 제거
+        sheet_name = node_name.lstrip('/')
+        
+        # 특수문자 제거
+        sheet_name = sheet_name.replace('/', '_').replace('\\', '_')
+        sheet_name = sheet_name.replace('?', '_').replace('*', 'x')
+        sheet_name = sheet_name.replace('[', '_').replace(']', '_')
+        sheet_name = sheet_name.replace(':', '_')
+        sheet_name = sheet_name.strip('_')
+        
+        # 31자 제한
+        if len(sheet_name) > 31:
+            # 끝부분이 더 의미있으므로 앞부분 자르기
+            excess = len(sheet_name) - 31 + 3  # "..." 추가
+            sheet_name = '...' + sheet_name[excess:]
+        
+        return sheet_name
 
 
 class TopicGrouper:

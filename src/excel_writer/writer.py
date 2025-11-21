@@ -121,6 +121,33 @@ class ExcelWriter:
             
             print(f"  ✓ {sheet_name}: {df.shape}")
     
+    def write_node_sheets(self, node_dataframes, max_rows=None):
+        """
+        각 ROS2 노드별 시트 생성
+        
+        Args:
+            node_dataframes: dict
+                {node_name: DataFrame, ...}
+                DataFrame columns: idx | TimeInterval | topic | submsg_name | PID_XXX | ...
+            max_rows: 최대 행 수 제한 (None이면 제한 없음)
+        """
+        for node_name, df in node_dataframes.items():
+            # 시트명이 31자를 초과하면 잘라냄 (Excel 제한)
+            sheet_name = node_name[:31] if len(node_name) > 31 else node_name
+            
+            # 대용량 데이터 경고
+            if max_rows and len(df) > max_rows:
+                print(f"  ⚠️  {sheet_name}: {len(df):,}행 (상위 {max_rows:,}행만 출력)")
+                df = df.head(max_rows)
+            
+            # 시트 생성
+            ws = self.workbook.create_sheet(sheet_name)
+            
+            # DataFrame을 시트에 쓰기 (PID 헤더 병합 포함)
+            self._write_dataframe_to_sheet(ws, df, sheet_type='participant')
+            
+            print(f"  ✓ {sheet_name}: {df.shape}")
+    
     def _write_dataframe_to_sheet(self, worksheet, df, sheet_type='participant'):
         """
         DataFrame을 시트에 쓰기 (헤더 포함)
