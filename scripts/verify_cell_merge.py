@@ -13,8 +13,8 @@ def verify_cell_merges():
     # 필터링된 파일 읽기
     wb = load_workbook('output/anomaly_detection_filtered.xlsx')
     
-    # 첫 번째 노드 시트
-    sheet_name = wb.sheetnames[0]
+    # Unknown 시트 (첫 번째 데이터 시트)
+    sheet_name = 'Unknown'
     ws = wb[sheet_name]
     
     print(f"\n시트: {sheet_name}")

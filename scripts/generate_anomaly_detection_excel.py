@@ -1,9 +1,19 @@
 #!/usr/bin/env python3
 """
+⚠️ DEPRECATED: 이 스크립트는 원본 Excel 구조와 호환되지 않는 형식을 생성합니다.
+
+대신 filter_anomaly_pids_from_excel.py를 사용하세요:
+    python scripts/filter_anomaly_pids_from_excel.py
+
 이상탐지용 엑셀 생성 스크립트
 
 13개의 이상탐지용 PID만 포함한 최적화된 엑셀 파일을 생성합니다.
 불필요한 PID 컬럼은 전부 제거하여 ML 학습에 최적화된 데이터셋을 만듭니다.
+
+⚠️ 문제점:
+- 단일 시트로 병합 (원본: 8개 노드 시트)
+- 직접 필드 컬럼 (원본: Timestamp/Value 쌍)
+- 원본 분석 도구와 호환되지 않음
 
 포함되는 컬럼:
 1. 기본 정보: timestamp, submsg_type, participant_guid, endpoint_guid
@@ -22,6 +32,14 @@
    - PID_TYPE_MAX_SIZE_SERIALIZED
    - PID_STATUS_INFO
 """
+
+import warnings
+warnings.warn(
+    "이 스크립트는 deprecated되었습니다. "
+    "filter_anomaly_pids_from_excel.py를 사용하세요.",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 import sys
 from pathlib import Path

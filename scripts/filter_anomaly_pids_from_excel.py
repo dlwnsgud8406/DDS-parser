@@ -45,8 +45,14 @@ def filter_columns(df, required_pids):
     """
     columns = df.columns.tolist()
     
-    # 기본 컬럼 (idx, TimeInterval)
-    selected_cols = ['idx', 'TimeInterval']
+    # 기본 컬럼 (idx, TimeInterval, topic)
+    selected_cols = []
+    if 'idx' in columns:
+        selected_cols.append('idx')
+    if 'TimeInterval' in columns:
+        selected_cols.append('TimeInterval')
+    if 'topic' in columns:
+        selected_cols.append('topic')
     
     # 각 PID와 해당 Unnamed 컬럼 찾기
     for pid in required_pids:
@@ -267,7 +273,7 @@ def filter_excel(input_path, output_path):
 def main():
     """메인 함수"""
     # 경로 설정
-    input_path = Path('output/shm_all_fixed.xlsx')
+    input_path = Path('output/shm_nodes_fixed.xlsx')
     output_path = Path('output/anomaly_detection_filtered.xlsx')
     
     # 입력 파일 존재 확인
