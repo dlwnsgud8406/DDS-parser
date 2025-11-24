@@ -60,6 +60,72 @@ def filter_columns(df, required_pids):
     return df[selected_cols]
 
 
+def get_merge_ranges(df, column_name):
+    """
+    DataFrame에서 동일한 값을 가진 연속된 행의 병합 범위 계산
+    
+    Args:
+        df: pandas DataFrame
+        column_name: 병합할 컬럼 이름
+    
+    Returns:
+        병합 범위 리스트 [(start_row, end_row), ...]
+    """
+    if column_name not in df.columns:
+        return []
+    
+    merge_ranges = []
+    values = df[column_name].values
+    
+    if len(values) == 0:
+        return []
+    
+    start_idx = 0
+    current_value = values[0]
+    
+    for i in range(1, len(values)):
+        # NaN 처리: pandas의 isna()와 동일한 값 비교
+        current_is_nan = pd.isna(current_value)
+        next_is_nan = pd.isna(values[i])
+        
+        # 값이 변경되었는지 확인 (NaN은 NaN끼리 같은 것으로 처리)
+        values_differ = (current_is_nan != next_is_nan) or \
+                       (not current_is_nan and not next_is_nan and values[i] != current_value)
+        
+        if values_differ:
+            # 병합 범위가 2개 이상의 행인 경우만 추가
+            if i - start_idx > 1:
+                # +3: 1행(헤더) + 2행(서브헤더) + 0-based index
+                merge_ranges.append((start_idx + 3, i + 2))
+            start_idx = i
+            current_value = values[i]
+    
+    # 마지막 범위 처리
+    if len(values) - start_idx > 1:
+        merge_ranges.append((start_idx + 3, len(values) + 2))
+    
+    return merge_ranges
+
+
+def apply_cell_merges(ws, df):
+    """
+    워크시트에 셀 병합 적용 (DataFrame 기반으로 빠르게)
+    
+    Args:
+        ws: openpyxl worksheet
+        df: pandas DataFrame
+    """
+    # idx 컬럼 (A열) 병합
+    idx_ranges = get_merge_ranges(df, 'idx')
+    for start, end in idx_ranges:
+        ws.merge_cells(f'A{start}:A{end}')
+    
+    # TimeInterval 컬럼 (B열) 병합
+    time_ranges = get_merge_ranges(df, 'TimeInterval')
+    for start, end in time_ranges:
+        ws.merge_cells(f'B{start}:B{end}')
+
+
 def style_worksheet(ws):
     """
     워크시트에 스타일 적용 (원본 스타일 모방)
@@ -176,6 +242,9 @@ def filter_excel(input_path, output_path):
         
         # 스타일 적용
         style_worksheet(ws)
+        
+        # 셀 병합 적용 (DataFrame 기반으로 빠르게)
+        apply_cell_merges(ws, filtered_df)
     
     # 파일 저장
     print(f"저장 중: {output_path}")
