@@ -8,6 +8,7 @@ from .grouper import ParticipantGrouper, TopicGrouper, NodeGrouper
 from .time_window import TimeWindowGenerator
 from .pivot_builder import PivotTableBuilder
 from .endpoint_mapper import EndpointMapper
+from .qos_analyzer import QoSAnalyzer
 from .node_extractor import NodeNameExtractor
 
 __all__ = [

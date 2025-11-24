@@ -15,9 +15,10 @@ from src.packet_source import PcapSource
 from src.parser import EnhancedRTPSParser
 from src.sink import DataFrameSink
 from src.processor import TimeWindowProcessor
-from src.transformer import TopicGrouper, NodeGrouper, EndpointMapper, PivotTableBuilder
+from src.transformer import TopicGrouper, NodeGrouper, EndpointMapper, PivotTableBuilder, QoSAnalyzer
 from src.excel_writer import ExcelWriter
 import pandas as pd
+from collections import defaultdict, Counter
 
 
 def main():
@@ -131,8 +132,14 @@ def main():
         print(f"  ✓ SEDP Readers: {len(separated['sedp_readers'])}개")
         print(f"  ✓ User Traffic: {len(separated['user_traffic'])}개")
         
-        # 5. 노드별 그룹화
-        print("\n[5/6] ROS2 노드별 그룹화...")
+        # 5. QoS 추론
+        print("\n[5/7] QoS 정책 추론...")
+        qos_analyzer = QoSAnalyzer()
+        topic_qos_map = qos_analyzer.analyze_messages(enriched_submessages)
+        print(f"  ✓ {len(topic_qos_map)}개 토픽의 QoS 추론 완료")
+        
+        # 6. 노드별 그룹화
+        print("\n[6/7] ROS2 노드별 그룹화...")
         node_grouper = NodeGrouper()
         grouped_by_node = node_grouper.group_by_node(enriched_submessages)
         print(f"  ✓ {len(grouped_by_node)}개 노드 발견")
@@ -141,13 +148,25 @@ def main():
             print("  ⚠️  노드가 없습니다. Excel 생성을 중단합니다.")
             sys.exit(1)
         
-        # 6. Pivot Table 생성 (노드별)
-        print("\n[6/6] 노드별 Pivot Table 생성...")
+        # 7. Pivot Table 생성 (노드별) + QoS 추가
+        print("\n[7/8] 노드별 Pivot Table 생성 + QoS 매핑...")
         builder = PivotTableBuilder(window_size=args.window)
         pivot_tables = {}
         
         for node_name, messages in grouped_by_node.items():
             df_pivot = builder.build(messages, participant_id=None)
+            
+            # QoS 정보 추가
+            if 'topic' in df_pivot.columns:
+                df_pivot['reliability'] = df_pivot['topic'].map(
+                    lambda t: topic_qos_map.get(t, {}).get('reliability', '')
+                )
+                df_pivot['durability'] = df_pivot['topic'].map(
+                    lambda t: topic_qos_map.get(t, {}).get('durability', '')
+                )
+                df_pivot['frequency_hz'] = df_pivot['topic'].map(
+                    lambda t: topic_qos_map.get(t, {}).get('frequency_hz', 0)
+                )
             
             # 시트명 생성
             sheet_name = node_grouper.format_node_name_for_sheet(node_name)
@@ -155,8 +174,13 @@ def main():
             pivot_tables[sheet_name] = df_pivot
             print(f"  ✓ {sheet_name}: {len(df_pivot):,} 행 ({len(messages)} messages)")
         
-        # Overview 생성 (노드 기반)
-        print("\n[7/7] Overview 및 SEDP 시트 생성...")
+        # Overview 및 QoS Summary 생성
+        print("\n[8/9] Overview, QoS Summary, SEDP 시트 생성...")
+        
+        # QoS Summary 데이터
+        qos_summary_data = qos_analyzer.get_qos_summary_dataframe()
+        df_qos_summary = pd.DataFrame(qos_summary_data)
+        print(f"  ✓ QoS Summary 시트: {len(df_qos_summary)} 토픽")
         
         node_summary = node_grouper.get_node_summary(grouped_by_node)
         overview_data = []
@@ -185,8 +209,8 @@ def main():
         df_sedp = pd.DataFrame(sedp_data)
         print(f"  ✓ SEDP 시트: {len(df_sedp)} endpoints")
         
-        # 8. Excel 쓰기
-        print("\n[8/8] Excel 쓰기...")
+        # 9. Excel 쓰기
+        print("\n[9/9] Excel 쓰기...")
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         
         writer = ExcelWriter(output_path)
@@ -194,6 +218,10 @@ def main():
         # Overview 시트
         writer.write_overview(df_overview)
         print(f"  ✓ Overview 시트 작성")
+        
+        # QoS Summary 시트
+        writer.write_qos_summary(df_qos_summary)
+        print(f"  ✓ QoS Summary 시트 작성")
         
         # SEDP 시트 (간단한 테이블)
         writer.write_sedp_sheet(df_sedp)

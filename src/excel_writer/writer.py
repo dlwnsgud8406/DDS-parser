@@ -50,6 +50,22 @@ class ExcelWriter:
         
         print(f"  ✓ Overview 시트 생성: {len(df_overview)} nodes")
     
+    def write_qos_summary(self, df_qos):
+        """
+        QoS Summary 시트 생성
+        
+        Args:
+            df_qos: pandas.DataFrame
+                Columns: Topic | Reliability | Durability | Frequency | Messages
+        """
+        # 시트 생성 (Overview 다음)
+        ws = self.workbook.create_sheet("QoS_Summary", 1)
+        
+        # DataFrame을 시트에 쓰기
+        self._write_dataframe_to_sheet(ws, df_qos, sheet_type='overview')
+        
+        print(f"  ✓ QoS Summary 시트 생성: {len(df_qos)} topics")
+    
     def write_sedp_sheet(self, df_sedp):
         """
         SEDP (Endpoint Discovery) 시트 생성
@@ -59,8 +75,8 @@ class ExcelWriter:
                 Columns: endpoint_kind | hostId | appId | instanceId | entityId | 
                          topic | type | reliability | durability | ...
         """
-        # 시트 생성
-        ws = self.workbook.create_sheet("SEDP_Endpoints", 1)
+        # 시트 생성 (QoS Summary 다음)
+        ws = self.workbook.create_sheet("SEDP_Endpoints", 2)
         
         # DataFrame을 시트에 쓰기
         self._write_dataframe_to_sheet(ws, df_sedp, sheet_type='overview')
